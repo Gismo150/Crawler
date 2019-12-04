@@ -1,18 +1,16 @@
 package main;
 
 import Models.BuildSystem;
+import Models.EConfig;
 import Models.RMetaData;
-import com.google.gson.*;
 import org.eclipse.egit.github.core.*;
 import org.eclipse.egit.github.core.client.GitHubClient;
+import org.eclipse.egit.github.core.client.PageIterator;
+import org.eclipse.egit.github.core.service.CommitService;
 import org.eclipse.egit.github.core.service.ContentsService;
 import org.eclipse.egit.github.core.service.RepositoryService;
-import utils.Curl;
 import utils.JsonWriter;
 import java.io.*;
-import java.text.DateFormat;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.*;
 
 /**
@@ -30,14 +28,6 @@ public class GitHubCrawler {
      */
     private BuildSystem buildSystem;
     /**
-     * The users login name to GitHub
-     */
-    private String username;
-    /**
-     * The users login password to GitHub.
-     */
-    private String password;
-    /**
      * The GitHub client object.
      */
     private GitHubClient client;
@@ -51,16 +41,13 @@ public class GitHubCrawler {
      * Crawlers Constructor.
      * @param language The programming language filter.
      * @param buildSystem The build system filter.
-     * @param username The Github user name.
-     * @param password The Github user password.
+     * @param oAuthToken The Github OAuth token for authentication.
      */
-    public GitHubCrawler(String language, String lastPushedDate, String starsDecreaseAmount ,BuildSystem buildSystem, String username, String password){
+    public GitHubCrawler(String language, String lastPushedDate, String starsDecreaseAmount ,BuildSystem buildSystem, String oAuthToken){
         this.searchLanguage = language;
         this.lastPushedDate = lastPushedDate;
         this.buildSystem = buildSystem;
-        this.username = username;
-        this.password = password;
-        this.client = authenticate(username, password);
+        this.client = authenticate(oAuthToken);
 
         try {
             this.starDecreaseAmount = Integer.parseInt(starsDecreaseAmount);
@@ -84,16 +71,16 @@ public class GitHubCrawler {
      * Function to authenticate to the GitHub client. Authenticated user have 5000 request per hour.
      * Not authenticated users have 60 requests per hour.
      *
-     * @param user The Github user name.
-     * @param password The Github user password.
+     * @param oAuthToken The Github OAuth token for authentication.
      * @return Either an authenticated ot not authenticated GithubClient.
      */
-    private GitHubClient authenticate(String user, String password) {
+    private GitHubClient authenticate(String oAuthToken) {
         GitHubClient client = new GitHubClient();
         try {
-            client.setCredentials(user, password);
+            client.setOAuth2Token(oAuthToken);
         } catch (Exception e) {
-            System.out.println("Wrong username or Password!");
+            System.out.println("Invalid Token!");
+            System.out.println(e);
         }
         return client;
     }
@@ -271,36 +258,16 @@ public class GitHubCrawler {
     }
 
     /**
-     * Queries the GitHub v3 Commit model of the default master branch.
-     *
-     * @param repository The repository we are currently looking at.
-     * @return A json response from the Github v3 endpoint.
-     */
-    private JsonObject queryCommitsOnDefaultMasterBranch(Repository repository) {
-        JsonObject jsonResponse = null;
-        try {
-            Thread.sleep(1500);
-            String stringResponse = Curl.getHTML("https://api.github.com/repos/" + repository.getOwner().getLogin() + "/" + repository.getName() + "/commits/" + repository.getMasterBranch());
-            jsonResponse = new JsonParser().parse(stringResponse).getAsJsonObject();
-        } catch (Exception e) {
-            System.err.println("Something went wrong while querying the repository commits.\n");
-            System.err.println(e.getMessage());
-        }
-        return jsonResponse;
-    }
-
-    /**
-     * Gets the latest commit id (sha) from the json Response.
+     * Gets the latest commit id (sha) from the repository default (master) branch.
      *
      * @param repository The repository we are currently looking at.
      * @return The latest commit id as a String.
      */
     private String getLatestCommitId(Repository repository){
-        String latestCommitId = "";
-        JsonObject commits = queryCommitsOnDefaultMasterBranch(repository);
-        if(commits.has("sha"))
-            latestCommitId = commits.get("sha").getAsString();
-
-        return latestCommitId;
+        CommitService commitService = new CommitService(client);
+        PageIterator<RepositoryCommit> repositoryCommitList = commitService.pageCommits(repository, 1);
+        if(repositoryCommitList.hasNext())
+            return repositoryCommitList.next().iterator().next().getSha();
+        else return "";
     }
 }

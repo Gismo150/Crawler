@@ -7,8 +7,7 @@ package Models;
  */
 
 public enum EConfig {
-    USERNAME("username"),
-    PASSWORD("password"),
+    OAUTHTOKEN("OAuthToken"),
     LANGUAGE("language"),
     LASTPUSHEDDATE("lastPushedDate"),
     STARSDECREASEAMOUNT("starsDecreaseAmount"),
@@ -33,10 +32,8 @@ public enum EConfig {
 
     public static EConfig getEConfig(String name) {
         switch (name) {
-            case "username":
-                return EConfig.USERNAME;
-            case "password":
-                return EConfig.PASSWORD;
+            case "OAuthToken":
+                return EConfig.OAUTHTOKEN;
             case "language":
                 return EConfig.LANGUAGE;
             case "lastPushedDate":

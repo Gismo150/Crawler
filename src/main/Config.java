@@ -10,8 +10,7 @@ public class Config {
     public static final String LASTPUSHEDDATE = PropertyFileReader.getInstance().getProperty(EConfig.LASTPUSHEDDATE);
     public static final String STARSDECREASEAMOUNT = PropertyFileReader.getInstance().getProperty(EConfig.STARSDECREASEAMOUNT);
     public static final BuildSystem BUILDSYSTEM = BuildSystem.getBuildType(PropertyFileReader.getInstance().getProperty(EConfig.BUILDSYSTEM));
-    public static final String USERNAME = PropertyFileReader.getInstance().getProperty(EConfig.USERNAME);
-    public static final String PASSWORD = PropertyFileReader.getInstance().getProperty(EConfig.PASSWORD);
+    public static final String OAUTHTOKEN = PropertyFileReader.getInstance().getProperty(EConfig.OAUTHTOKEN);
     public static final String FILEPATH = PropertyFileReader.getInstance().getProperty(EConfig.FILEPATH);
     public static final String JSONFILENAME = "repositories.json";
     public static final String RESULTFILENAME = "results.json";
