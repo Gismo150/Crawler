@@ -4,7 +4,7 @@ import java.util.Date;
 import java.util.List;
 
 /**
- * Repository MetaData Model that is stored into the XML database.
+ * Repository MetaData Model.
  *
  * @author Daniel Braun
  */

@@ -37,6 +37,9 @@ public class GitHubCrawler {
     private int counter = 0;
     private boolean foundRepoInLastQuery;
     private boolean notFirstQuery = false;
+    private RepositoryService repositoryService;
+    private CommitService commitService;
+    private ContentsService contentsService;
     /**
      * Crawlers Constructor.
      * @param language The programming language filter.
@@ -48,11 +51,18 @@ public class GitHubCrawler {
         this.lastPushedDate = lastPushedDate;
         this.buildSystem = buildSystem;
         this.client = authenticate(oAuthToken);
+        repositoryService = new RepositoryService(client);
+        commitService = new CommitService(client);
+        contentsService = new ContentsService(client);
 
         try {
             this.starDecreaseAmount = Integer.parseInt(starsDecreaseAmount);
+            if(starDecreaseAmount <= 0){
+                System.err.println("starsDecreaseAmount must be greater 0. Config file not properly set up.\nShutting down.");
+                System.exit(1);
+            }
         } catch (NumberFormatException e) {
-            System.err.println("starsDecreaseAmount not an integer. Config file not properly set up.\nShutting down.");
+            System.err.println("starsDecreaseAmount is not an integer. Config file not properly set up.\nShutting down.");
             System.exit(1);
         }
     }
@@ -61,9 +71,8 @@ public class GitHubCrawler {
      * The main entry point to start the crawler.
      */
     public void run() {
-
         while(true) {
-            filterRepositories(getRepositoryService(client), buildSearchQuery());
+            filterRepositories(buildSearchQuery());
         }
     }
 
@@ -80,13 +89,9 @@ public class GitHubCrawler {
             client.setOAuth2Token(oAuthToken);
         } catch (Exception e) {
             System.out.println("Invalid Token!");
-            System.out.println(e);
+            System.out.println(e.getMessage());
         }
         return client;
-    }
-
-    private RepositoryService getRepositoryService(GitHubClient client) {
-        return new RepositoryService(client);
     }
 
     private Map<String, String> buildSearchQuery() {
@@ -124,10 +129,10 @@ public class GitHubCrawler {
         return searchQuery;
     }
 
-    private List<SearchRepository> queryRepositories(RepositoryService service, Map<String, String> searchQuery, int page){
+    private List<SearchRepository> queryRepositories(Map<String, String> searchQuery, int page){
         try {
             Thread.sleep(1500);
-            return service.searchRepositories(searchQuery, page);
+            return repositoryService.searchRepositories(searchQuery, page);
         } catch (IOException | InterruptedException e) {
             System.err.println("Something went wrong while performing the repository search request.\nAborting.\n");
             System.err.println(e.getMessage());
@@ -136,10 +141,10 @@ public class GitHubCrawler {
         return null;
     }
 
-    private Repository queryRepoByOwnerAndName(RepositoryService service, SearchRepository searchRepository) {
+    private Repository queryRepoByOwnerAndName(SearchRepository searchRepository) {
         try {
             Thread.sleep(1500);
-            return service.getRepository(searchRepository.getOwner(), searchRepository.getName());
+            return repositoryService.getRepository(searchRepository.getOwner(), searchRepository.getName());
         } catch(IOException | InterruptedException e ) {
             System.err.println("Something went wrong while getting the Repository by Owner and repository Name. Skipping to next repository.");
             System.err.println(e.getMessage());
@@ -147,11 +152,11 @@ public class GitHubCrawler {
         return null;
     }
 
-    private void filterRepositories(RepositoryService service, Map<String, String> searchQuery) {
+    private void filterRepositories(Map<String, String> searchQuery) {
 
         for (int page = 1; page <= 10; page++) {
 
-            List<SearchRepository> searchRepositoryResponse = queryRepositories(service, searchQuery, page);
+            List<SearchRepository> searchRepositoryResponse = queryRepositories(searchQuery, page);
 
             if (searchRepositoryResponse.isEmpty()) { // If we reached a page number that returns no repositories (empty list) in the query.
                 System.out.println("Found " + searchRepositoryResponse.size() + " Repos by search at page " + page);
@@ -164,8 +169,9 @@ public class GitHubCrawler {
 
                 for (SearchRepository searchRepository : searchRepositoryResponse) {
 
-                    Repository repositoryOfOwnerAndName = queryRepoByOwnerAndName(service, searchRepository);
+                    Repository repositoryOfOwnerAndName = queryRepoByOwnerAndName(searchRepository);
                     maxStars = repositoryOfOwnerAndName.getWatchers();
+                    System.out.println("-----------------------------------------------");
                     System.err.println("Current maximum stars count: " + maxStars);
                     //Detect BuildSystem subroutine
                     BuildSystem foundBuildSystem = getFileContentsAtRootDir(repositoryOfOwnerAndName); // detectBuildSystem(repositoryOfOwnerAndName);
@@ -178,7 +184,6 @@ public class GitHubCrawler {
                             RMetaData metaDataObject = createRMetaDataObject(repositoryOfOwnerAndName, foundBuildSystem);
                             JsonWriter.getInstance().writeRepositoryToJson(metaDataObject);
                         }
-                        System.out.println("-----------------------------------------------");
                         System.out.println("Request Limit: " + client.getRequestLimit());
                         System.out.println("Remaining Request: " + client.getRemainingRequests());
                     }
@@ -228,7 +233,6 @@ public class GitHubCrawler {
      * @return The detected BuildSystem
      */
     private BuildSystem getFileContentsAtRootDir(Repository repository) {
-        ContentsService contentsService = new ContentsService(client);
         BuildSystem detectedBuildSystem = BuildSystem.UNKNOWN;
         List<String> filePaths = new ArrayList<>();
 
@@ -264,7 +268,6 @@ public class GitHubCrawler {
      * @return The latest commit id as a String.
      */
     private String getLatestCommitId(Repository repository){
-        CommitService commitService = new CommitService(client);
         PageIterator<RepositoryCommit> repositoryCommitList = commitService.pageCommits(repository, 1);
         if(repositoryCommitList.hasNext())
             return repositoryCommitList.next().iterator().next().getSha();
