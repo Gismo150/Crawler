@@ -68,8 +68,11 @@ public class GitHubCrawler {
         } else { // assuming correct token was provided!
             UserService userService = new UserService(client);
             try {
-                if (userService.getUser() != null)  //Check if current user is correctly authenticated.
+                if (userService.getUser() != null) { //Check if current user is correctly authenticated.
+                    System.out.println("Your current remaining request limit is: " + client.getRemainingRequests());
                     requestRateLimiter = RateLimiter.create((double) client.getRemainingRequests() / 3600d);
+                }
+
             } catch (IOException e) {
                 System.err.println(e.getMessage());
                 System.exit(1);
@@ -79,7 +82,6 @@ public class GitHubCrawler {
             searchRequestRateLimiter = RateLimiter.create(30d/60d);
         }
 
-        System.out.println("Your current remaining request limit is: " + client.getRemainingRequests());
         System.out.println("Requests are throttled to " + requestRateLimiter.getRate() + " requests per second.");
         System.out.println("Search requests are throttled to " + searchRequestRateLimiter.getRate() + " requests per second.");
 
