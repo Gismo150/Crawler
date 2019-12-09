@@ -1,14 +1,15 @@
 package main;
 
 import Models.BuildSystem;
-import Models.EConfig;
 import Models.RMetaData;
+import com.google.common.util.concurrent.RateLimiter;
 import org.eclipse.egit.github.core.*;
 import org.eclipse.egit.github.core.client.GitHubClient;
 import org.eclipse.egit.github.core.client.PageIterator;
 import org.eclipse.egit.github.core.service.CommitService;
 import org.eclipse.egit.github.core.service.ContentsService;
 import org.eclipse.egit.github.core.service.RepositoryService;
+import org.eclipse.egit.github.core.service.UserService;
 import utils.JsonWriter;
 import java.io.*;
 import java.util.*;
@@ -40,6 +41,10 @@ public class GitHubCrawler {
     private RepositoryService repositoryService;
     private CommitService commitService;
     private ContentsService contentsService;
+    // Request throttling using the com.google.guava 28.0-jre library
+    // SEE: https://www.javadoc.io/doc/com.google.guava/guava/28.0-jre/com/google/common/util/concurrent/RateLimiter.html
+    private RateLimiter requestRateLimiter;
+    private RateLimiter searchRequestRateLimiter;
     /**
      * Crawlers Constructor.
      * @param language The programming language filter.
@@ -54,6 +59,29 @@ public class GitHubCrawler {
         repositoryService = new RepositoryService(client);
         commitService = new CommitService(client);
         contentsService = new ContentsService(client);
+
+        //Request limit values are defined here : https://developer.github.com/v3/#rate-limiting
+        //Search Request limit values are defined here: developer.github.com/v3/search/#rate-limit
+        if(Config.OAUTHTOKEN.equals("")) {
+            requestRateLimiter = RateLimiter.create(60d/3600d);
+            searchRequestRateLimiter = RateLimiter.create(10d/60d);
+        } else { // assuming correct token was provided!
+            UserService userService = new UserService(client);
+            try {
+                if (userService.getUser() != null)  //Check if current user is correctly authenticated.
+                    requestRateLimiter = RateLimiter.create((double) client.getRemainingRequests() / 3600d);
+            } catch (IOException e) {
+                System.err.println(e.getMessage());
+                System.exit(1);
+            }
+            //Not possible to request the remaining amount of search requests, thus it is set to the maximum
+            // for authenticated users.
+            searchRequestRateLimiter = RateLimiter.create(30d/60d);
+        }
+
+        System.out.println("Your current remaining request limit is: " + client.getRemainingRequests());
+        System.out.println("Requests are throttled to " + requestRateLimiter.getRate() + " requests per second.");
+        System.out.println("Search requests are throttled to " + searchRequestRateLimiter.getRate() + " requests per second.");
 
         try {
             this.starDecreaseAmount = Integer.parseInt(starsDecreaseAmount);
@@ -86,10 +114,10 @@ public class GitHubCrawler {
     private GitHubClient authenticate(String oAuthToken) {
         GitHubClient client = new GitHubClient();
         try {
-            client.setOAuth2Token(oAuthToken);
+            client = client.setOAuth2Token(oAuthToken);
         } catch (Exception e) {
-            System.out.println("Invalid Token!");
-            System.out.println(e.getMessage());
+            System.err.println("Authentication failed!");
+            System.err.println(e.getMessage());
         }
         return client;
     }
@@ -131,9 +159,9 @@ public class GitHubCrawler {
 
     private List<SearchRepository> queryRepositories(Map<String, String> searchQuery, int page){
         try {
-            Thread.sleep(1500);
+            searchRequestRateLimiter.acquire();
             return repositoryService.searchRepositories(searchQuery, page);
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException e) {
             System.err.println("Something went wrong while performing the repository search request.\nAborting.\n");
             System.err.println(e.getMessage());
             System.exit(1);
@@ -143,9 +171,10 @@ public class GitHubCrawler {
 
     private Repository queryRepoByOwnerAndName(SearchRepository searchRepository) {
         try {
-            Thread.sleep(1500);
+            //Thread.sleep(1500);
+            requestRateLimiter.acquire();
             return repositoryService.getRepository(searchRepository.getOwner(), searchRepository.getName());
-        } catch(IOException | InterruptedException e ) {
+        } catch(IOException e) {
             System.err.println("Something went wrong while getting the Repository by Owner and repository Name. Skipping to next repository.");
             System.err.println(e.getMessage());
         }
@@ -172,7 +201,7 @@ public class GitHubCrawler {
                     Repository repositoryOfOwnerAndName = queryRepoByOwnerAndName(searchRepository);
                     maxStars = repositoryOfOwnerAndName.getWatchers();
                     System.out.println("-----------------------------------------------");
-                    System.err.println("Current maximum stars count: " + maxStars);
+                    System.out.println("Current maximum stars count: " + maxStars);
                     //Detect BuildSystem subroutine
                     BuildSystem foundBuildSystem = getFileContentsAtRootDir(repositoryOfOwnerAndName); // detectBuildSystem(repositoryOfOwnerAndName);
                     if (repositoryOfOwnerAndName != null) {
@@ -237,6 +266,7 @@ public class GitHubCrawler {
         List<String> filePaths = new ArrayList<>();
 
         try {
+            requestRateLimiter.acquire();
             List<RepositoryContents> repositoryContents = contentsService.getContents(repository);
             switch (buildSystem) { //using switch as it is easy to extend with further buildsystems to detect by adding more custom cases.
                 case CMAKE:
@@ -268,6 +298,7 @@ public class GitHubCrawler {
      * @return The latest commit id as a String.
      */
     private String getLatestCommitId(Repository repository){
+        requestRateLimiter.acquire();
         PageIterator<RepositoryCommit> repositoryCommitList = commitService.pageCommits(repository, 1);
         if(repositoryCommitList.hasNext())
             return repositoryCommitList.next().iterator().next().getSha();
