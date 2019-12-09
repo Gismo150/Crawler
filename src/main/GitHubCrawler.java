@@ -114,7 +114,7 @@ public class GitHubCrawler {
     private GitHubClient authenticate(String oAuthToken) {
         GitHubClient client = new GitHubClient();
         try {
-            client = client.setOAuth2Token(oAuthToken);
+            client.setOAuth2Token(oAuthToken);
         } catch (Exception e) {
             System.err.println("Authentication failed!");
             System.err.println(e.getMessage());
@@ -171,7 +171,6 @@ public class GitHubCrawler {
 
     private Repository queryRepoByOwnerAndName(SearchRepository searchRepository) {
         try {
-            //Thread.sleep(1500);
             requestRateLimiter.acquire();
             return repositoryService.getRepository(searchRepository.getOwner(), searchRepository.getName());
         } catch(IOException e) {
