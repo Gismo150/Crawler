@@ -161,6 +161,9 @@ public class GitHubCrawler {
 
     private List<SearchRepository> queryRepositories(Map<String, String> searchQuery, int page){
         try {
+            //search requests also count as a general request and thus are also throttled
+            //by the general request limiter.
+            requestRateLimiter.acquire(); //TODO: NOCHMAL EIN FULL RUN TESTEN OB LIMIT NICHT EXCEEDED WIRD.
             searchRequestRateLimiter.acquire();
             return repositoryService.searchRepositories(searchQuery, page);
         } catch (IOException e) {
@@ -200,15 +203,15 @@ public class GitHubCrawler {
                 for (SearchRepository searchRepository : searchRepositoryResponse) {
 
                     Repository repositoryOfOwnerAndName = queryRepoByOwnerAndName(searchRepository);
-                    maxStars = repositoryOfOwnerAndName.getWatchers();
-                    System.out.println("-----------------------------------------------");
-                    System.out.println("Current maximum stars count: " + maxStars);
-                    //Detect BuildSystem subroutine
-                    BuildSystem foundBuildSystem = getFileContentsAtRootDir(repositoryOfOwnerAndName); // detectBuildSystem(repositoryOfOwnerAndName);
                     if (repositoryOfOwnerAndName != null) {
+                        maxStars = repositoryOfOwnerAndName.getWatchers();
+                        System.out.println("-----------------------------------------------");
+                        System.out.println("Current maximum stars count: " + maxStars);
+                        //Detect BuildSystem subroutine
+                        BuildSystem foundBuildSystem = getFileContentsAtRootDir(repositoryOfOwnerAndName); // detectBuildSystem(repositoryOfOwnerAndName);
                         if (foundBuildSystem == buildSystem) { //BuildSystem was detected. Create a new RMetaData object and store all information
                             System.out.println("-----------------------------------------------");
-                            counter ++;
+                            counter++;
                             foundRepoInLastQuery = true;
                             System.err.println("Overall detected repos: " + counter);
                             RMetaData metaDataObject = createRMetaDataObject(repositoryOfOwnerAndName, foundBuildSystem);
