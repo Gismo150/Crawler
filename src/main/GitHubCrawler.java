@@ -163,7 +163,7 @@ public class GitHubCrawler {
         try {
             //search requests also count as a general request and thus are also throttled
             //by the general request limiter.
-            requestRateLimiter.acquire(); //TODO: NOCHMAL EIN FULL RUN TESTEN OB LIMIT NICHT EXCEEDED WIRD.
+            requestRateLimiter.acquire();
             searchRequestRateLimiter.acquire();
             return repositoryService.searchRepositories(searchQuery, page);
         } catch (IOException e) {
