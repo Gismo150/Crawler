@@ -13,6 +13,8 @@ import org.eclipse.egit.github.core.service.UserService;
 import utils.JsonWriter;
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 
 /**
  * Main GitHub Crawler class. Queries, filters and stores the GitHub repositories.
@@ -35,7 +37,12 @@ public class GitHubCrawler {
     private String lastPushedDate;
     private int maxStars = Integer.MAX_VALUE;
     private int starDecreaseAmount;
-    private int counter = 0;
+    private int matchingRepos = 0;
+    private int checkedRepos = 0;
+    private int counterSearchRequests = 0;
+    private int counterRepositoryRequests = 0;
+    private int counterContentRequests = 0;
+    private int counterCommitRequests = 0;
     private boolean foundRepoInLastQuery;
     private boolean notFirstQuery = false;
     private RepositoryService repositoryService;
@@ -45,13 +52,20 @@ public class GitHubCrawler {
     // SEE: https://www.javadoc.io/doc/com.google.guava/guava/28.0-jre/com/google/common/util/concurrent/RateLimiter.html
     private RateLimiter requestRateLimiter;
     private RateLimiter searchRequestRateLimiter;
+    private Logger logger;
+    private long startTime;
+    private int localRemainingRequests = 5000;
+    private double maximumWaitingTime = 0;
+    private double overallWaitingTime = 0;
     /**
      * Crawlers Constructor.
      * @param language The programming language filter.
      * @param buildSystem The build system filter.
      * @param oAuthToken The Github OAuth token for authentication.
      */
-    public GitHubCrawler(String language, String lastPushedDate, String starsDecreaseAmount ,BuildSystem buildSystem, String oAuthToken){
+    public GitHubCrawler(String language, String lastPushedDate, String starsDecreaseAmount , BuildSystem buildSystem, String oAuthToken, Logger logger, long startTime){
+        this.logger = logger;
+        this.startTime = startTime;
         this.searchLanguage = language;
         this.lastPushedDate = lastPushedDate;
         this.buildSystem = buildSystem;
@@ -70,6 +84,7 @@ public class GitHubCrawler {
             try {
                 if (userService.getUser() != null) { //Check if current user is correctly authenticated.
                     System.out.println("Your current remaining request limit is: " + client.getRemainingRequests());
+                    logger.info("Current remaining request limit is: " + client.getRemainingRequests());
                     requestRateLimiter = RateLimiter.create((double) client.getRemainingRequests() / 3600d);
                 }
 
@@ -83,7 +98,9 @@ public class GitHubCrawler {
         }
 
         System.out.println("Requests are throttled to " + requestRateLimiter.getRate() + " requests per second.");
+        logger.info("Requests are throttled to " + requestRateLimiter.getRate() + " requests per second.");
         System.out.println("Search requests are throttled to " + searchRequestRateLimiter.getRate() + " requests per second.");
+        logger.info("Search requests are throttled to " + searchRequestRateLimiter.getRate() + " requests per second.");
 
         try {
             this.starDecreaseAmount = Integer.parseInt(starsDecreaseAmount);
@@ -143,6 +160,7 @@ public class GitHubCrawler {
             //NOTE: This case is ignored. If we do not find any popular repository within the first 1000 repositories that uses conan,
             //then it would be unnecessary to crawl either for conan or on github for it.
             System.err.println("No popular repository was found within the first query without a stars limit.\nShutting Down.");
+            logger.info("No popular repository was found within the first query without a stars limit.\nShutting Down.");
             System.err.println("NOTE: This case is ignored. If we do not find any popular repository that uses conan within the first 1000 repositories, " +
                     "then it would be unnecessary to crawl either for conan or on github for it.");
             System.exit(1);
@@ -154,6 +172,26 @@ public class GitHubCrawler {
             // it will set the stars count again to 0, resulting to the same query in a loop.
             System.out.println("Minimum value for stars reached. | STARS COUNT: " + maxStars);
             System.out.println("Crawling finished.\nShutting down");
+            logger.info("Overall amount of checked repositories: " + checkedRepos);
+            logger.info("Overall amount of matching repositories found: " + matchingRepos);
+            logger.info("Amount of search requests sent: " + counterSearchRequests);
+            logger.info("Amount of repository requests sent: " + counterRepositoryRequests);
+            logger.info("Amount of content requests sent: " + counterContentRequests);
+            logger.info("Amount of commit requests sent: " + counterCommitRequests);
+            logger.info("Remaining requests before termination: " + localRemainingRequests);
+            logger.info("Maximum time spent waiting before any request in seconds: " + maximumWaitingTime);
+            logger.info("Overall time spent waiting before any request in seconds: " + overallWaitingTime);
+            logger.info("Overall time spent waiting before any request in minutes: " + overallWaitingTime/60);
+            logger.info("Overall time spent waiting before any request in hours: " + overallWaitingTime/3600);
+
+            long endTime   = System.nanoTime();
+            long duration = endTime - startTime;
+            logger.info("Crawler started at: " + new Date(startTime).toString());
+            logger.info("Crawler terminated at" + new Date(endTime).toString());
+            logger.info("Overall execution time in seconds: " + TimeUnit.NANOSECONDS.toSeconds(duration));
+            logger.info("Overall execution time in minutes: " + TimeUnit.NANOSECONDS.toSeconds(duration)/60);
+            logger.info("Overall execution time in hours: " + TimeUnit.NANOSECONDS.toSeconds(duration)/3600);
+            logger.info("Crawling finished. Shutting down");
             System.exit(0);
         }
         return searchQuery;
@@ -163,8 +201,11 @@ public class GitHubCrawler {
         try {
             //search requests also count as a general request and thus are also throttled
             //by the general request limiter.
-            requestRateLimiter.acquire();
-            searchRequestRateLimiter.acquire();
+            double wait1 = requestRateLimiter.acquire();
+            double wait2 = searchRequestRateLimiter.acquire();
+            updateMaxWaitingTime(wait1);
+            updateMaxWaitingTime(wait2);
+            counterSearchRequests++;
             return repositoryService.searchRepositories(searchQuery, page);
         } catch (IOException e) {
             System.err.println("Something went wrong while performing the repository search request.\nAborting.\n");
@@ -176,7 +217,9 @@ public class GitHubCrawler {
 
     private Repository queryRepoByOwnerAndName(SearchRepository searchRepository) {
         try {
-            requestRateLimiter.acquire();
+            double wait = requestRateLimiter.acquire();
+            updateMaxWaitingTime(wait);
+            counterRepositoryRequests++;
             return repositoryService.getRepository(searchRepository.getOwner(), searchRepository.getName());
         } catch(IOException e) {
             System.err.println("Something went wrong while getting the Repository by Owner and repository Name. Skipping to next repository.");
@@ -207,18 +250,28 @@ public class GitHubCrawler {
                         maxStars = repositoryOfOwnerAndName.getWatchers();
                         System.out.println("-----------------------------------------------");
                         System.out.println("Current maximum stars count: " + maxStars);
+                        checkedRepos++;
                         //Detect BuildSystem subroutine
                         BuildSystem foundBuildSystem = getFileContentsAtRootDir(repositoryOfOwnerAndName); // detectBuildSystem(repositoryOfOwnerAndName);
                         if (foundBuildSystem == buildSystem) { //BuildSystem was detected. Create a new RMetaData object and store all information
                             System.out.println("-----------------------------------------------");
-                            counter++;
+                            matchingRepos++;
                             foundRepoInLastQuery = true;
-                            System.err.println("Overall detected repos: " + counter);
+                            System.err.println("Overall detected repos: " + matchingRepos);
                             RMetaData metaDataObject = createRMetaDataObject(repositoryOfOwnerAndName, foundBuildSystem);
                             JsonWriter.getInstance().writeRepositoryToJson(metaDataObject);
                         }
                         System.out.println("Request Limit: " + client.getRequestLimit());
                         System.out.println("Remaining Request: " + client.getRemainingRequests());
+                        if(localRemainingRequests > client.getRemainingRequests()) {
+                            localRemainingRequests = client.getRemainingRequests();
+                        } else {
+                            logger.info("Remaining requests before reset: " + localRemainingRequests);
+                            long resetTime   = System.nanoTime();
+                            logger.info("Requests reset at: " + new Date(resetTime).toString());
+                            localRemainingRequests = 5000;
+                        }
+
                     }
                 }
             }
@@ -245,7 +298,7 @@ public class GitHubCrawler {
         meteDataObject.setForksCount(repository.getForks());
         meteDataObject.setOpenIssuesCount(repository.getOpenIssues());
         meteDataObject.setStargazersCount(repository.getWatchers()); // NOTE: stargazers and watchers count are the same since 2012.
-                                                                     // The counter now only increases if a project is starred.
+                                                                     // The matchingRepos now only increases if a project is starred.
                                                                      // SEE https://developer.github.com/changes/2012-09-05-watcher-api/
         meteDataObject.setHtmlUrl(repository.getHtmlUrl());
         meteDataObject.setCloneUrl(repository.getCloneUrl());
@@ -270,8 +323,10 @@ public class GitHubCrawler {
         List<String> filePaths = new ArrayList<>();
 
         try {
-            requestRateLimiter.acquire();
+            double wait = requestRateLimiter.acquire();
+            updateMaxWaitingTime(wait);
             List<RepositoryContents> repositoryContents = contentsService.getContents(repository);
+            counterContentRequests++;
             switch (buildSystem) { //using switch as it is easy to extend with further buildsystems to detect by adding more custom cases.
                 case CMAKE:
                     if((repositoryContents.stream().anyMatch(o -> o.getName().equals("conanfile.py"))
@@ -302,10 +357,19 @@ public class GitHubCrawler {
      * @return The latest commit id as a String.
      */
     private String getLatestCommitId(Repository repository){
-        requestRateLimiter.acquire();
+        double wait = requestRateLimiter.acquire();
+        updateMaxWaitingTime(wait);
         PageIterator<RepositoryCommit> repositoryCommitList = commitService.pageCommits(repository, 1);
+        counterCommitRequests++;
         if(repositoryCommitList.hasNext())
             return repositoryCommitList.next().iterator().next().getSha();
         else return "";
+    }
+
+    private void updateMaxWaitingTime(double waitingTime) {
+        if(maximumWaitingTime < waitingTime) {
+            maximumWaitingTime = waitingTime;
+        }
+        overallWaitingTime += waitingTime;
     }
 }
