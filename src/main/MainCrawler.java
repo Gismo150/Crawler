@@ -1,7 +1,6 @@
 package main;
 
 import java.io.IOException;
-import java.util.Date;
 import java.util.logging.*;
 
 /**
@@ -23,14 +22,12 @@ public class MainCrawler {
             e.printStackTrace();
         }
         logger.setUseParentHandlers(false);
-        logger.info("------------------------------------------");
         logger.config("CONFIGURATION:");
         logger.config("Language: " + Config.LANGUAGE);
         logger.config("Last pushed date: " + Config.LASTPUSHEDDATE);
         logger.config("Stars decrease amount: " + Config.STARSDECREASEAMOUNT);
         logger.config("Build system: " + Config.BUILDSYSTEM.toString());
         logger.config("Filepath: " + Config.FILEPATH);
-        logger.info("------------------------------------------");
 
 
         long startTime = System.nanoTime();
