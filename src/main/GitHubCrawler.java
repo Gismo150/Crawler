@@ -12,6 +12,7 @@ import org.eclipse.egit.github.core.service.RepositoryService;
 import org.eclipse.egit.github.core.service.UserService;
 import utils.JsonWriter;
 import java.io.*;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
@@ -57,14 +58,16 @@ public class GitHubCrawler {
     private int localRemainingRequests = 5000;
     private double maximumWaitingTime = 0;
     private double overallWaitingTime = 0;
+    private String systemStartTime;
     /**
      * Crawlers Constructor.
      * @param language The programming language filter.
      * @param buildSystem The build system filter.
      * @param oAuthToken The Github OAuth token for authentication.
      */
-    public GitHubCrawler(String language, String lastPushedDate, String starsDecreaseAmount , BuildSystem buildSystem, String oAuthToken, Logger logger, long startTime){
+    public GitHubCrawler(String language, String lastPushedDate, String starsDecreaseAmount , BuildSystem buildSystem, String oAuthToken, Logger logger, long startTime, String systemStartTime){
         this.logger = logger;
+        this.systemStartTime = systemStartTime;
         this.startTime = startTime;
         this.searchLanguage = language;
         this.lastPushedDate = lastPushedDate;
@@ -184,13 +187,15 @@ public class GitHubCrawler {
             logger.info("Overall time spent waiting before any request in minutes: " + overallWaitingTime/60);
             logger.info("Overall time spent waiting before any request in hours: " + overallWaitingTime/3600);
 
+            Calendar calendar = Calendar.getInstance();
+            SimpleDateFormat formatter = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
             long endTime   = System.nanoTime();
             long duration = endTime - startTime;
-            logger.info("Crawler started at: " + new Date(startTime).toString());
-            logger.info("Crawler terminated at" + new Date(endTime).toString());
+            logger.info("Crawler started at: " + systemStartTime);
+            logger.info("Crawler terminated at: " + formatter.format(calendar.getTime()));
             logger.info("Overall execution time in seconds: " + TimeUnit.NANOSECONDS.toSeconds(duration));
-            logger.info("Overall execution time in minutes: " + TimeUnit.NANOSECONDS.toSeconds(duration)/60);
-            logger.info("Overall execution time in hours: " + TimeUnit.NANOSECONDS.toSeconds(duration)/3600);
+            logger.info("Overall execution time in minutes: " + (double)TimeUnit.NANOSECONDS.toSeconds(duration)/60);
+            logger.info("Overall execution time in hours: " + (double)TimeUnit.NANOSECONDS.toSeconds(duration)/3600);
             logger.info("Crawling finished. Shutting down");
             System.exit(0);
         }
@@ -266,9 +271,11 @@ public class GitHubCrawler {
                         if(localRemainingRequests > client.getRemainingRequests()) {
                             localRemainingRequests = client.getRemainingRequests();
                         } else {
+                            logger.info("----------------------------------------------------------");
                             logger.info("Remaining requests before reset: " + localRemainingRequests);
-                            long resetTime   = System.nanoTime();
-                            logger.info("Requests reset at: " + new Date(resetTime).toString());
+                            Calendar calendar = Calendar.getInstance();
+                            SimpleDateFormat formatter = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
+                            logger.info("Requests reset at: " + formatter.format(calendar.getTime()));
                             localRemainingRequests = 5000;
                         }
 
