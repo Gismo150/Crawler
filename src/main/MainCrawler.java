@@ -1,6 +1,8 @@
 package main;
 
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.logging.*;
 
 /**
@@ -15,7 +17,7 @@ public class MainCrawler {
         logger.setLevel(Level.ALL);
         Handler handler = null;
         try {
-            handler = new FileHandler("Crawler_Log", true);
+            handler = new FileHandler(Config.FILEPATH + "/Crawler_Log.xml", false);
             handler.setLevel(Level.ALL);
             logger.addHandler(handler);
         } catch (IOException e) {
@@ -29,10 +31,12 @@ public class MainCrawler {
         logger.config("Build system: " + Config.BUILDSYSTEM.toString());
         logger.config("Filepath: " + Config.FILEPATH);
 
-
+        Calendar calendar = Calendar.getInstance();
+        SimpleDateFormat formatter = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
+        String systemStartTime = formatter.format(calendar.getTime());
         long startTime = System.nanoTime();
         //Init crawler with configuration.
-        GitHubCrawler crawler = new GitHubCrawler(Config.LANGUAGE, Config.LASTPUSHEDDATE, Config.STARSDECREASEAMOUNT, Config.BUILDSYSTEM, Config.OAUTHTOKEN, logger, startTime);
+        GitHubCrawler crawler = new GitHubCrawler(Config.LANGUAGE, Config.LASTPUSHEDDATE, Config.STARSDECREASEAMOUNT, Config.BUILDSYSTEM, Config.OAUTHTOKEN, logger, startTime, systemStartTime);
         //Start the crawler.
         crawler.run();
 
