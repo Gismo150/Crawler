@@ -28,7 +28,7 @@ public enum BuildSystem {
 
     public static BuildSystem getBuildType(String name) {
         switch (name) {
-            case "CONAN":
+            case "CMAKE":
                 return BuildSystem.CMAKE;
             default:
                 return BuildSystem.UNKNOWN;
