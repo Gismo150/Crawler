@@ -6,7 +6,7 @@ import java.util.Calendar;
 import java.util.logging.*;
 
 /**
- * Main entry point of the whole program
+ * Main entry point of the whole program.
  *
  * @author Daniel Braun
  */

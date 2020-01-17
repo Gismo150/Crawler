@@ -144,6 +144,13 @@ public class GitHubCrawler {
         return client;
     }
 
+    /**
+     * Function builds the search query dependent on outcome of the preceding 1000 repositories.
+     * Initial search query is unbound.
+     * Each following query is bound by the amount of stars.
+     * This function also terminats the whole crawling process when the amount of stars reaches less or equal 0.
+     * @return A Map of <String,String> search qualifiers.
+     */
     private Map<String, String> buildSearchQuery() {
         Map<String, String> searchQuery = new HashMap<String, String>();
         searchQuery.put("language", searchLanguage); //Search for repos with given searchlLanguage set in the config file
@@ -202,6 +209,12 @@ public class GitHubCrawler {
         return searchQuery;
     }
 
+    /**
+     * Function that sends the search request.
+     * @param searchQuery The search query qualifiers.
+     * @param page The 0-10 pages to query.
+     * @return A List of SearchRepository objects containing metadata.
+     */
     private List<SearchRepository> queryRepositories(Map<String, String> searchQuery, int page){
         try {
             //search requests also count as a general request and thus are also throttled
@@ -220,6 +233,11 @@ public class GitHubCrawler {
         return null;
     }
 
+    /**
+     * Sends a query to get the repository model by its owner and repository name.
+     * @param searchRepository The repository to query for.
+     * @return The repository model.
+     */
     private Repository queryRepoByOwnerAndName(SearchRepository searchRepository) {
         try {
             double wait = requestRateLimiter.acquire();
@@ -233,6 +251,12 @@ public class GitHubCrawler {
         return null;
     }
 
+    /**
+     * Function that searches for repository matches by iterating over the array response from the search query.,
+     * i.e. by checking its root contents for the conanfile and CMakeLists.txt file.
+     * If a matching is found it all required metadata is collected and stored into the repositories.json file.
+     * @param searchQuery The search query to send.
+     */
     private void filterRepositories(Map<String, String> searchQuery) {
 
         for (int page = 1; page <= 10; page++) {
@@ -249,7 +273,7 @@ public class GitHubCrawler {
                 System.out.println("Query Response:\nNumber Repos: " + searchRepositoryResponse.size() + "\nOn page " + page + ".\n");
 
                 for (SearchRepository searchRepository : searchRepositoryResponse) {
-
+                    //Get the repository model.
                     Repository repositoryOfOwnerAndName = queryRepoByOwnerAndName(searchRepository);
                     if (repositoryOfOwnerAndName != null) {
                         maxStars = repositoryOfOwnerAndName.getWatchers();
@@ -286,6 +310,12 @@ public class GitHubCrawler {
         System.out.println("Maximum number of 1000 repositories were processed within one search query.\nSkipping others due to limitation.");
     }
 
+    /**
+     * Constructs the RMetaData object for later serialization into json and storage in to the repositories.json file.
+     * @param repository The Repository model
+     * @param buildSystem The BuildSystem of the repository.
+     * @return The RMetaData object.
+     */
     private RMetaData createRMetaDataObject(Repository repository, BuildSystem buildSystem) {
         RMetaData meteDataObject = new RMetaData();
         //Set all crawled fields
@@ -373,6 +403,10 @@ public class GitHubCrawler {
         else return "";
     }
 
+    /**
+     * Helper function to log the maximum waiting time between any two requests sent to GitHub.
+     * @param waitingTime
+     */
     private void updateMaxWaitingTime(double waitingTime) {
         if(maximumWaitingTime < waitingTime) {
             maximumWaitingTime = waitingTime;
