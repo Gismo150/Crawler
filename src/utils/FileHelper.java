@@ -38,14 +38,6 @@ public class FileHelper {
         }
     }
 
-    public static String getResultsJsonFilePath() {
-        if (Config.FILEPATH.isEmpty()) {
-            return System.getProperty("user.dir") + "/" + Config.RESULTFILENAME;
-        } else {
-            return Config.FILEPATH + "/" + Config.RESULTFILENAME;
-        }
-    }
-
     public static List<String> getAllFileNamesOfDir(String dir) {
         try (Stream<Path> walk = Files.walk(Paths.get(dir))) {
 
