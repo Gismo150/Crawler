@@ -73,12 +73,30 @@ public class GitHubCrawler {
         this.lastPushedDate = lastPushedDate;
         this.buildSystem = buildSystem;
         this.client = authenticate(oAuthToken);
+        initGitHubServices();
+        calcRequestLimits();
+
+        try {
+            this.starDecreaseAmount = Integer.parseInt(starsDecreaseAmount);
+            if(starDecreaseAmount <= 0){
+                System.err.println("starsDecreaseAmount must be greater 0. Config file not properly set up.\nShutting down.");
+                System.exit(1);
+            }
+        } catch (NumberFormatException e) {
+            System.err.println("starsDecreaseAmount is not an integer. Config file not properly set up.\nShutting down.");
+            System.exit(1);
+        }
+    }
+
+    private void initGitHubServices() {
         repositoryService = new RepositoryService(client);
         commitService = new CommitService(client);
         contentsService = new ContentsService(client);
+    }
 
+    private void calcRequestLimits() {
         //Request limit values are defined here : https://developer.github.com/v3/#rate-limiting
-        //Search Request limit values are defined here: developer.github.com/v3/search/#rate-limit
+        //Search Request limit values are defined here: https://developer.github.com/v3/search/#rate-limit
         if(Config.OAUTHTOKEN.equals("")) {
             requestRateLimiter = RateLimiter.create(60d/3600d);
             searchRequestRateLimiter = RateLimiter.create(10d/60d);
@@ -102,16 +120,6 @@ public class GitHubCrawler {
         System.out.println("Requests are throttled to " + requestRateLimiter.getRate() + " requests per second.");
         System.out.println("Search requests are throttled to " + searchRequestRateLimiter.getRate() + " requests per second.");
 
-        try {
-            this.starDecreaseAmount = Integer.parseInt(starsDecreaseAmount);
-            if(starDecreaseAmount <= 0){
-                System.err.println("starsDecreaseAmount must be greater 0. Config file not properly set up.\nShutting down.");
-                System.exit(1);
-            }
-        } catch (NumberFormatException e) {
-            System.err.println("starsDecreaseAmount is not an integer. Config file not properly set up.\nShutting down.");
-            System.exit(1);
-        }
     }
 
 

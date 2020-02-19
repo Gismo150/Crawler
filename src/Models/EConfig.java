@@ -13,9 +13,6 @@ public enum EConfig {
     STARSDECREASEAMOUNT("starsDecreaseAmount"),
     BUILDSYSTEM("buildSystem"),
     FILEPATH("filePath"),
-    HOSTPATH("hostPath"),
-    CONTAINERPATH("containerPath"),
-    ANALSISTOOL("analysisTool"),
     UNKNOWN("unknown");
 
 
@@ -45,11 +42,6 @@ public enum EConfig {
             case "filePath":
                 return EConfig.FILEPATH;
             case "hostPath":
-                return EConfig.HOSTPATH;
-            case "containerPath":
-                return EConfig.CONTAINERPATH;
-            case "analysisTool":
-                return EConfig.ANALSISTOOL;
             default:
                 return EConfig.UNKNOWN;
         }
