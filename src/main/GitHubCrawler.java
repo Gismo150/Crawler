@@ -74,6 +74,7 @@ public class GitHubCrawler {
         this.buildSystem = buildSystem;
         this.client = authenticate(oAuthToken);
         initGitHubServices();
+        printSetup();
         calcRequestLimits();
 
         try {
@@ -86,6 +87,20 @@ public class GitHubCrawler {
             System.err.println("starsDecreaseAmount is not an integer. Config file not properly set up.\nShutting down.");
             System.exit(1);
         }
+    }
+
+    private void printSetup() {
+        System.out.println("----------CONFIGURATION----------");
+
+        System.out.println("BuildSystem: " + Config.BUILDSYSTEM);
+        if(BuildSystem.CUSTOM == buildSystem)
+            System.out.println("Searching for custom file: " + Config.CUSTOMFILE);
+        System.out.println("Repository language: " + Config.LANGUAGE);
+        if(Config.FILEPATH.isEmpty())
+            System.out.println("Output is written to: " + System.getProperty("user.dir"));
+        else
+            System.out.println("Output is written to: " + System.getProperty("user.dir") + "/" + Config.FILEPATH);
+        System.out.println("---------------------------------");
     }
 
     private void initGitHubServices() {
@@ -119,6 +134,7 @@ public class GitHubCrawler {
 
         System.out.println("Requests are throttled to " + requestRateLimiter.getRate() + " requests per second.");
         System.out.println("Search requests are throttled to " + searchRequestRateLimiter.getRate() + " requests per second.");
+        System.out.println("---------------------------------");
 
     }
 
@@ -281,9 +297,8 @@ public class GitHubCrawler {
                         System.out.println("Current maximum stars count: " + maxStars);
                         checkedRepos++;
                         //Detect BuildSystem subroutine
-                        BuildSystem foundBuildSystem = getFileContentsAtRootDir(repositoryOfOwnerAndName); // detectBuildSystem(repositoryOfOwnerAndName);
+                        BuildSystem foundBuildSystem = getFileContentsAtRootDir(repositoryOfOwnerAndName);
                         if (foundBuildSystem == buildSystem) { //BuildSystem was detected. Create a new RMetaData object and store all information
-                            System.out.println("-----------------------------------------------");
                             matchingRepos++;
                             foundRepoInLastQuery = true;
                             System.err.println("Overall detected repos: " + matchingRepos);
@@ -305,7 +320,7 @@ public class GitHubCrawler {
      * @return The RMetaData object.
      */
     private RMetaData createRMetaDataObject(Repository repository, BuildSystem buildSystem) {
-        RMetaData meteDataObject = new RMetaData();
+        RMetaData meteDataObject = new RMetaData(); //TODO: put this function into the model?
         //Set all crawled fields
         meteDataObject.setId(repository.getId());
         meteDataObject.setName(repository.getName());
@@ -338,43 +353,6 @@ public class GitHubCrawler {
     }
 
     /**
-     * Detects if the repository contains specific build files required by the currently searched build system.
-     *
-     * @param repository The repository to detect the build system from
-     * @return The detected BuildSystem
-     */
-    private BuildSystem getFileContentsAtRootDir(Repository repository) {
-        BuildSystem detectedBuildSystem = BuildSystem.UNKNOWN;
-        List<String> filePaths = new ArrayList<>();
-
-        try {
-            requestRateLimiter.acquire();
-            List<RepositoryContents> repositoryContents = contentsService.getContents(repository);
-            counterContentRequests++;
-            switch (buildSystem) { //using switch as it is easy to extend with further buildsystems to detect by adding more custom cases.
-                case CMAKE: //TODO: make this generic and provid default searches through build system definition
-                    if((repositoryContents.stream().anyMatch(o -> o.getName().equals("conanfile.py"))
-                        || repositoryContents.stream().anyMatch(o -> o.getName().equals("conanfile.txt")))
-                        && repositoryContents.stream().anyMatch(o -> o.getName().equals("CMakeLists.txt"))) { //When checking for the existence of a CMakeLists.txt file,
-                                                                                                              //the [generator] defined in the conanfile will most likely be set to CMake
-                                                                                                              //Thus we make an assumption that the generator is always set to CMake in the conanfile!
-                        if(repositoryContents.stream().anyMatch(o -> o.getName().equals("conanfile.py")))
-                            filePaths.add("conanfile.py");
-                        else
-                            filePaths.add("conanfile.txt");
-                        detectedBuildSystem = BuildSystem.CMAKE;
-                    }
-                    break;
-            }
-        } catch (IOException e) {
-            System.err.println("Something went wrong while querying the repository contents.\n");
-            System.err.println(e.getMessage());
-        }
-        detectedBuildSystem.setFilePaths(filePaths);
-        return detectedBuildSystem;
-    }
-
-    /**
      * Gets the latest commit id (sha) from the repository default (master) branch.
      *
      * @param repository The repository we are currently looking at.
@@ -387,5 +365,58 @@ public class GitHubCrawler {
         if(repositoryCommitList.hasNext())
             return repositoryCommitList.next().iterator().next().getSha();
         else return "";
+    }
+
+    /**
+     * Detects if the repository contains specific build files required by the currently searched build system.
+     *
+     * @param repository The repository to detect the build system from
+     * @return The detected BuildSystem
+     */
+    private BuildSystem getFileContentsAtRootDir(Repository repository) {
+        BuildSystem detectedBuildSystem = BuildSystem.UNKNOWN;
+        List<String> filePaths = new ArrayList<>();
+
+        try {
+            requestRateLimiter.acquire();
+            List<RepositoryContents> repositoryContents = contentsService.getContents(repository);
+           // contentsService.getContents(repository, "path/to/folder"); //TODO: use this function to search for files on specific path!
+            counterContentRequests++;
+            switch (buildSystem) {
+                case CMAKE:
+                    if(repositoryContents.stream().anyMatch(o -> o.getName().equals(BuildSystem.CMAKE.getBuildFiles()[0]))) {
+                        // filePaths.add(""); // set here the filepath to the given file.
+                        //check github library docu for requesting all files within a given path!
+                        detectedBuildSystem = BuildSystem.CMAKE;
+                    }
+                    break;
+                case AUTOTOOLS://((configure.ac || configure.in) && Makefile.am))
+                    if(((repositoryContents.stream().anyMatch(o -> o.getName().equals(BuildSystem.AUTOTOOLS.getBuildFiles()[0])) ||
+                        repositoryContents.stream().anyMatch(o -> o.getName().equals(BuildSystem.AUTOTOOLS.getBuildFiles()[1]))) &&
+                        repositoryContents.stream().anyMatch(o -> o.getName().equals(BuildSystem.AUTOTOOLS.getBuildFiles()[2])))) {
+                        detectedBuildSystem = BuildSystem.AUTOTOOLS;
+                    }
+                    break;
+                case MAKE:
+                    if(repositoryContents.stream().anyMatch(o -> o.getName().equals(BuildSystem.MAKE.getBuildFiles()[0]))) {
+                        detectedBuildSystem = BuildSystem.MAKE;
+                    }
+                    break;
+                case CUSTOM:
+                    if(repositoryContents.stream().anyMatch(o -> o.getName().equals(Config.CUSTOMFILE))) {
+                        detectedBuildSystem = BuildSystem.CUSTOM;
+                    }
+                    break;
+                default:
+                    System.out.println("Running default");
+                    detectedBuildSystem = BuildSystem.UNKNOWN;
+                    break;
+            }
+        } catch (IOException e) {
+            System.err.println("Something went wrong while querying the repository contents.\n");
+            System.err.println(e.getMessage());
+        }
+        detectedBuildSystem.setFilePaths(filePaths);
+        return detectedBuildSystem;
     }
 }

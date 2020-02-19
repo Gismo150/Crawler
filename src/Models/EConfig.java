@@ -13,6 +13,7 @@ public enum EConfig {
     STARSDECREASEAMOUNT("starsDecreaseAmount"),
     BUILDSYSTEM("buildSystem"),
     FILEPATH("filePath"),
+    CUSTOMFILE("customFile"),
     UNKNOWN("unknown");
 
 
@@ -37,11 +38,12 @@ public enum EConfig {
                 return EConfig.LASTPUSHEDDATE;
             case "starsDecreaseAmount":
                 return EConfig.STARSDECREASEAMOUNT;
-            case "buildType":
+            case "buildSystem":
                 return EConfig.BUILDSYSTEM;
             case "filePath":
                 return EConfig.FILEPATH;
-            case "hostPath":
+            case "customFile":
+                return EConfig.CUSTOMFILE;
             default:
                 return EConfig.UNKNOWN;
         }

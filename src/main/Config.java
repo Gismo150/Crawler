@@ -13,6 +13,7 @@ public class Config {
     public static final String OAUTHTOKEN = PropertyFileReader.getInstance().getProperty(EConfig.OAUTHTOKEN);
     public static final String FILEPATH = PropertyFileReader.getInstance().getProperty(EConfig.FILEPATH);
     public static final String JSONFILENAME = "repositories.json";
+    public static final String CUSTOMFILE = PropertyFileReader.getInstance().getProperty(EConfig.CUSTOMFILE);
 
 
 }
