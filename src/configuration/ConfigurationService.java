@@ -48,7 +48,7 @@ public class ConfigurationService {
         config.oauthtoken = "";
         config.language = "CPP";
         config.lastPushDate =  DateTimeFormatter.ofPattern("YYYY-MM-dd").format(LocalDateTime.now());
-        config.starsDecreaseAmount = 1;
+        config.starDecreaseAmount = 1;
         config.buildSystem = "CUSTOM";
         config.customFile = "CHANGELOG.md";
         config.filePath  = "shared";
@@ -82,7 +82,7 @@ public class ConfigurationService {
         systems.add(new BuildSystem("AUTOTOOLS", new String[] { "configure.ac", "configure.in", "Makefile.am" }));
         systems.add(new BuildSystem("MAKE", new String[] { "Makefile" }));
         systems.add(new BuildSystem("CUSTOM", new String[] { "" }));
-        systems.add(new BuildSystem("UNKNOWN", new String[] {}));
+        systems.add(BuildSystem.UNKOWN);
 
         return systems;
     }

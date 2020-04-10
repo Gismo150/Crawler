@@ -13,7 +13,7 @@ public class CrawlerConfig {
 
     public String lastPushDate;
 
-    public int starsDecreaseAmount;
+    public int starDecreaseAmount;
 
     public String oauthtoken;
 

@@ -1,8 +1,9 @@
 package main;
 
-import Models.BuildSystem;
+import configuration.BuildSystem;
 import Models.RMetaData;
 import com.google.common.util.concurrent.RateLimiter;
+import configuration.CrawlerConfig;
 import org.eclipse.egit.github.core.*;
 import org.eclipse.egit.github.core.client.GitHubClient;
 import org.eclipse.egit.github.core.client.PageIterator;
@@ -25,18 +26,19 @@ public class GitHubCrawler {
     /**
     * The filtered programming language.
     */
-    private String searchLanguage;
+    // private String searchLanguage;
     /**
      * The BuildSystem to detect and filter for.
      */
-    private BuildSystem buildSystem;
+    // private BuildSystem buildSystem;
     /**
      * The GitHub client object.
      */
     private GitHubClient client;
-    private String lastPushedDate;
+    // private String lastPushedDate;
+    // private int starDecreaseAmount;
+
     private int maxStars = Integer.MAX_VALUE;
-    private int starDecreaseAmount;
     private int matchingRepos = 0;
     private int checkedRepos = 0;
     private int counterSearchRequests = 0;
@@ -57,29 +59,37 @@ public class GitHubCrawler {
     private Calendar calendar;
     private SimpleDateFormat formatter;
 
+    private CrawlerConfig config;
+    private BuildSystem selectedBuildSystem;
+
     /**
      * Crawlers Constructor.
-     * @param language The programming language filter.
-     * @param buildSystem The build system filter.
-     * @param oAuthToken The Github OAuth token for authentication.
      */
-    public GitHubCrawler(String language, String lastPushedDate, String starsDecreaseAmount , BuildSystem buildSystem, String oAuthToken){
+    // public GitHubCrawler(String language, String lastPushedDate, String starsDecreaseAmount , BuildSystem buildSystem, String oAuthToken){
+    public GitHubCrawler(CrawlerConfig config) {
+        this.config = config;
+        this.selectedBuildSystem = (configuration.BuildSystem)this.config.buildSystems
+                .stream()
+                .filter(s -> ((configuration.BuildSystem)s).name.equals(this.config.buildSystem))
+                .findFirst()
+                .orElse(new configuration.BuildSystem("UNKNOWN", new String[]{}));
+
         this.calendar = Calendar.getInstance();
         this.formatter =  new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
         this.systemStartTime = formatter.format(calendar.getTime());
         this.startTime = System.nanoTime();
 
-        this.searchLanguage = language;
-        this.lastPushedDate = lastPushedDate;
-        this.buildSystem = buildSystem;
-        this.client = authenticate(oAuthToken);
+        // this.searchLanguage = language;
+        // this.lastPushedDate = lastPushedDate;
+        // this.buildSystem = buildSystem;
+
+        this.client = authenticate(config.oauthtoken);
         initGitHubServices();
         printSetup();
         calcRequestLimits();
 
         try {
-            this.starDecreaseAmount = Integer.parseInt(starsDecreaseAmount);
-            if(starDecreaseAmount <= 0){
+            if(config.starDecreaseAmount <= 0){
                 System.err.println("starsDecreaseAmount must be greater 0. Config file not properly set up.\nShutting down.");
                 System.exit(1);
             }
@@ -92,14 +102,16 @@ public class GitHubCrawler {
     private void printSetup() {
         System.out.println("----------CONFIGURATION----------");
 
-        System.out.println("BuildSystem: " + Config.BUILDSYSTEM);
-        if(BuildSystem.CUSTOM == buildSystem)
-            System.out.println("Searching for custom file: " + Config.CUSTOMFILE);
-        System.out.println("Repository language: " + Config.LANGUAGE);
-        if(Config.FILEPATH.isEmpty())
+        System.out.println("BuildSystem: " + config.buildSystem);
+        //if(BuildSystem.CUSTOM == buildSystem)
+        //    System.out.println("Searching for custom file: " + Config.CUSTOMFILE);
+
+        System.out.println("Repository language: " + config.language);
+
+        if(config.filePath.isEmpty())
             System.out.println("Output is written to: " + System.getProperty("user.dir"));
         else
-            System.out.println("Output is written to: " + System.getProperty("user.dir") + "/" + Config.FILEPATH);
+            System.out.println("Output is written to: " + System.getProperty("user.dir") + "/" + config.filePath);
         System.out.println("---------------------------------");
     }
 
@@ -112,7 +124,7 @@ public class GitHubCrawler {
     private void calcRequestLimits() {
         //Request limit values are defined here : https://developer.github.com/v3/#rate-limiting
         //Search Request limit values are defined here: https://developer.github.com/v3/search/#rate-limit
-        if(Config.OAUTHTOKEN.equals("")) {
+        if(config.oauthtoken.equals("")) {
             requestRateLimiter = RateLimiter.create(60d/3600d);
             searchRequestRateLimiter = RateLimiter.create(10d/60d);
         } else { // assuming correct token was provided!
@@ -175,9 +187,9 @@ public class GitHubCrawler {
      */
     private Map<String, String> buildSearchQuery() {
         Map<String, String> searchQuery = new HashMap<String, String>();
-        searchQuery.put("language", searchLanguage); //Search for repos with given searchlLanguage set in the config file
+        searchQuery.put("language", this.config.language); //Search for repos with given searchlLanguage set in the config file
         searchQuery.put("is", "public"); //Search for repos that are public
-        searchQuery.put("pushed", ">=" + lastPushedDate); // The pushed qualifier will return a list of repositories, sorted by the most recent commit made on any branch in the repository.
+        searchQuery.put("pushed", ">=" + this.config.lastPushDate); // The pushed qualifier will return a list of repositories, sorted by the most recent commit made on any branch in the repository.
         searchQuery.put("sort", "stars");
 
         if(maxStars != Integer.MAX_VALUE && maxStars > 0 && foundRepoInLastQuery) {
@@ -185,8 +197,8 @@ public class GitHubCrawler {
             System.out.println("Querying repositories with maximum number of stars of '" + maxStars + "' from last repository of previous query.");
             searchQuery.put("stars", "<=" + (maxStars));
         } else if(!foundRepoInLastQuery && maxStars != Integer.MAX_VALUE) {
-            System.out.println("No repository was found within the last 1000 crawled repositories.\nDecreasing the current stars count of "+maxStars+" by "+starDecreaseAmount+".");
-            maxStars = maxStars - starDecreaseAmount;
+            System.out.println("No repository was found within the last 1000 crawled repositories.\nDecreasing the current stars count of "+maxStars+" by "+ this.config.starDecreaseAmount +".");
+            maxStars = maxStars - this.config.starDecreaseAmount;
             searchQuery.put("stars", "<=" + maxStars);
         } else if(!foundRepoInLastQuery && maxStars == Integer.MAX_VALUE && notFirstQuery) {
             //NOTE: This case is ignored. If we do not find any popular repository within the first 1000 repositories,
@@ -297,14 +309,17 @@ public class GitHubCrawler {
                         System.out.println("Current maximum stars count: " + maxStars);
                         checkedRepos++;
                         //Detect BuildSystem subroutine
+
                         BuildSystem foundBuildSystem = getFileContentsAtRootDir(repositoryOfOwnerAndName);
-                        if (foundBuildSystem == buildSystem) { //BuildSystem was detected. Create a new RMetaData object and store all information
+
+                        if (foundBuildSystem.name.equals(this.config.buildSystem)) { //BuildSystem was detected. Create a new RMetaData object and store all information
                             matchingRepos++;
                             foundRepoInLastQuery = true;
                             System.err.println("Overall detected repos: " + matchingRepos);
                             RMetaData metaDataObject = createRMetaDataObject(repositoryOfOwnerAndName, foundBuildSystem);
                             JsonWriter.getInstance().writeRepositoryToJson(metaDataObject);
                         }
+
                         System.out.println("Remaining Request: " + client.getRemainingRequests());
                     }
                 }
@@ -374,7 +389,7 @@ public class GitHubCrawler {
      * @return The detected BuildSystem
      */
     private BuildSystem getFileContentsAtRootDir(Repository repository) {
-        BuildSystem detectedBuildSystem = BuildSystem.UNKNOWN;
+        BuildSystem detectedBuildSystem = BuildSystem.UNKOWN;
         List<String> filePaths = new ArrayList<>();
 
         try {
@@ -382,40 +397,44 @@ public class GitHubCrawler {
             List<RepositoryContents> repositoryContents = contentsService.getContents(repository);
            // contentsService.getContents(repository, "path/to/folder"); //TODO: use this function to search for files on specific path!
             counterContentRequests++;
-            switch (buildSystem) {
-                case CMAKE:
-                    if(repositoryContents.stream().anyMatch(o -> o.getName().equals(BuildSystem.CMAKE.getBuildFiles()[0]))) {
+
+            // TODO This must be changed for end-users that define custom Build-Systems
+            switch (this.selectedBuildSystem.name) {
+                case "CMAKE":
+                    if(repositoryContents.stream().anyMatch(o -> o.getName().equals(selectedBuildSystem.buildFiles[0]))) {
                         // filePaths.add(""); // set here the filepath to the given file.
                         //check github library docu for requesting all files within a given path!
-                        detectedBuildSystem = BuildSystem.CMAKE;
+                        detectedBuildSystem = selectedBuildSystem;
                     }
                     break;
-                case AUTOTOOLS://((configure.ac || configure.in) && Makefile.am))
-                    if(((repositoryContents.stream().anyMatch(o -> o.getName().equals(BuildSystem.AUTOTOOLS.getBuildFiles()[0])) ||
-                        repositoryContents.stream().anyMatch(o -> o.getName().equals(BuildSystem.AUTOTOOLS.getBuildFiles()[1]))) &&
-                        repositoryContents.stream().anyMatch(o -> o.getName().equals(BuildSystem.AUTOTOOLS.getBuildFiles()[2])))) {
-                        detectedBuildSystem = BuildSystem.AUTOTOOLS;
+                case "AUTOTOOLS"://((configure.ac || configure.in) && Makefile.am))
+                    if(((repositoryContents.stream().anyMatch(o -> o.getName().equals(selectedBuildSystem.buildFiles[0])) ||
+                        repositoryContents.stream().anyMatch(o -> o.getName().equals(selectedBuildSystem.buildFiles[1]))) &&
+                        repositoryContents.stream().anyMatch(o -> o.getName().equals(selectedBuildSystem.buildFiles[2])))) {
+                        detectedBuildSystem = selectedBuildSystem;
                     }
                     break;
-                case MAKE:
-                    if(repositoryContents.stream().anyMatch(o -> o.getName().equals(BuildSystem.MAKE.getBuildFiles()[0]))) {
-                        detectedBuildSystem = BuildSystem.MAKE;
+                case "MAKE":
+                    if(repositoryContents.stream().anyMatch(o -> o.getName().equals(selectedBuildSystem.buildFiles[0]))) {
+                        detectedBuildSystem = selectedBuildSystem;
                     }
                     break;
-                case CUSTOM:
+                case "CUSTOM":
                     if(repositoryContents.stream().anyMatch(o -> o.getName().equals(Config.CUSTOMFILE))) {
-                        detectedBuildSystem = BuildSystem.CUSTOM;
+                        detectedBuildSystem = selectedBuildSystem;
                     }
                     break;
                 default:
                     System.out.println("Running default");
-                    detectedBuildSystem = BuildSystem.UNKNOWN;
+                    detectedBuildSystem = BuildSystem.UNKOWN;
                     break;
             }
+
         } catch (IOException e) {
             System.err.println("Something went wrong while querying the repository contents.\n");
             System.err.println(e.getMessage());
         }
+
         detectedBuildSystem.setFilePaths(filePaths);
         return detectedBuildSystem;
     }
