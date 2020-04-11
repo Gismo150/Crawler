@@ -15,6 +15,5 @@ public class MainCrawler {
         GitHubCrawler crawler = new GitHubCrawler(config);
         //Start the crawler.
         crawler.run();
-
     }
 }
